@@ -1,6 +1,6 @@
 package repository
 
-import (
+/*import (
 	"context"
 	"database/sql"
 	"go-microservice/utils"
@@ -83,4 +83,4 @@ func NewPsqlRepository(ctx context.Context, dbCfg *DbCfg) *PsqlRepository {
 func (r *PsqlRepository) Close() error {
 	r.log.Info("Closing DB!")
 	return r.db.Close()
-}
+}*/

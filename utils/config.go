@@ -7,30 +7,26 @@ import (
 )
 
 type Config struct {
-	AppName         string
-	HostAddress     string
-	DbCtxTimeoutSec int
-	DbHost          string
-	DbPort          string
-	DbUsername      string
-	DbPassword      string
-	DbName          string
-	DbSslMode       bool
+	AppName       string
+	HostAddress   string
+	MinioEndpoint string
+	MinioUser     string
+	MinioPassword string
+	MinioBucket   string
+	MinioFile     string
 }
 
 func CfgLoad(app string) *Config {
 	GlobalLogger().Info("Loading config for %s", app)
 	defer GlobalLogger().Info("Loading config for %s done", app)
 	return &Config{
-		AppName:         app,
-		HostAddress:     getEnv("HOST_ADDRESS", ":9898"),
-		DbCtxTimeoutSec: getEnvInt("DB_CTX_TOUT_SEC", 3),
-		DbHost:          getEnv("DB_HOST", "localhost"),
-		DbPort:          getEnv("DB_PORT", "5432"),
-		DbUsername:      getEnv("DB_USERNAME", "postgres"),
-		DbPassword:      getEnv("DB_PASSWORD", "postgres"),
-		DbName:          getEnv("DB_NAME", "db"),
-		DbSslMode:       getEnvBool("DB_SSL_MODE", false),
+		AppName:       app,
+		HostAddress:   getEnv("HOST_ADDRESS", ":9898"),
+		MinioEndpoint: getEnv("MINIO_ENDPOINT", "minio:9000"),
+		MinioUser:     getEnv("MINIO_USER", "root_minio"),
+		MinioPassword: getEnv("MINIO_PASSWORD", "root_paswd"),
+		MinioBucket:   getEnv("MINIO_BUCKET", "user-bucket"),
+		MinioFile:     getEnv("MINIO_FILE", "file.json"),
 	}
 }
 
