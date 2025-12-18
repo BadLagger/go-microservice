@@ -1,7 +1,11 @@
 package main
 
-import "fmt"
+import (
+	"go-microservice/utils"
+)
 
 func main() {
-	fmt.Printf("Hello go-microservices\n")
+	log := utils.GlobalLogger().SetLevel(utils.Debug)
+	log.Info("App start!!!")
+	defer log.Info("App DONE!!!")
 }
