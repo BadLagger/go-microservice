@@ -7,4 +7,5 @@
 !docker-compose.yml
 !README.md
 !*.go
+!*.sql
 !*/
