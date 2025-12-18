@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  postres:
+  postgres:
     image: postgres:latest
     container_name: go_microservice_postgres
     restart: unless-stopped
@@ -14,3 +14,23 @@ services:
       - "7777:5432" # external port : internal port
     volumes:
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app_user -d appdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+  
+  app:
+    build: .
+    container_name: go_microservice_app
+    restart: unless-stopped
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=appdb
+      - DB_USERNAME=app_user
+      - DB_PASSWORD=app_user_pswd
+    depends_on:
+      - postgres
+    ports:
+      - "9898:9898"
