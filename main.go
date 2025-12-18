@@ -18,7 +18,7 @@ func main() {
 	log.Info("App start!!!")
 	defer log.Info("App DONE!!!")
 
-	cfg := utils.CfgLoad("Go-Microservice")
+	cfg := utils.CfgLoad("Go-Microservice-Docker")
 	log.Debug("Config load for app: %s", cfg.AppName)
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -34,3 +34,7 @@ services:
       - postgres
     ports:
       - "9898:9898"
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: sh -c "go mod download && go run ."
