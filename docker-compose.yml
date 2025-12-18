@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  postres:
+    image: postgres:latest
+    container_name: go_microservice_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: appdb
+      POSTGRES_USER: app_user
+      POSTGRES_PASSWORD: app_user_pswd
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=C"
+    ports:
+      - "7777:5432" # external port : internal port
+    volumes:
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql

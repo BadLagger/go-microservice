@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"go-microservice/handlers"
+	"go-microservice/repository"
 	"go-microservice/utils"
 	"net/http"
 	"os"
@@ -22,6 +23,13 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	repo := repository.NewPsqlRepository(ctx, repository.PgConfigFromConfig(cfg))
+	if repo == nil {
+		log.Critical("Cann't connect to db!")
+		return
+	}
+	defer repo.Close()
 
 	userHandlers := handlers.NewUserHandler()
 
