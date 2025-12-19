@@ -47,6 +47,7 @@ func main() {
 		router.HandleFunc("/api/users", userHandlers.AddNewUser).Methods("POST")
 
 		router.HandleFunc("/api/users/{id}", userHandlers.GetUserById).Methods("GET")
+		router.HandleFunc("/api/users/{id}", userHandlers.ChangeUserById).Methods("PUT")
 
 		router.NotFoundHandler = http.HandlerFunc(userHandlers.NotFoundEndpoint)
 

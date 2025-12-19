@@ -147,9 +147,9 @@ func (r *MinIoRepository) GetUserById(id int) *models.User {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	for _, user := range r.users {
-		if user.ID == id {
-			return &user
+	for i := range r.users {
+		if r.users[i].ID == id {
+			return &r.users[i]
 		}
 	}
 	return nil
@@ -185,4 +185,8 @@ func (r *MinIoRepository) AddNewUser(name, email string, ctx context.Context) *m
 		return nil
 	}
 	return &user
+}
+
+func (r *MinIoRepository) Update(ctx context.Context) error {
+	return r.saveUsers(ctx)
 }
