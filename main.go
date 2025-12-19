@@ -24,9 +24,9 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	repo := repository.NewPsqlRepository(ctx, repository.PgConfigFromConfig(cfg))
+	repo := repository.NewMinIoRepository(cfg.MinioEndpoint, cfg.MinioUser, cfg.MinioPassword, cfg.MinioBucket, cfg.MinioFile, ctx, 5)
 	if repo == nil {
-		log.Critical("Cann't connect to db!")
+		log.Critical("MinIO down!")
 		return
 	}
 	defer repo.Close()
