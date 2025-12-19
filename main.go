@@ -31,7 +31,7 @@ func main() {
 	}
 	defer repo.Close()
 
-	userHandlers := handlers.NewUserHandler()
+	userHandlers := handlers.NewUserHandler(repo)
 
 	router := mux.NewRouter()
 	server := &http.Server{
@@ -44,6 +44,8 @@ func main() {
 		router.NotFoundHandler = http.HandlerFunc(userHandlers.NotFoundEndpoint)
 
 		router.HandleFunc("/test", userHandlers.TestEndpoint).Methods("GET")
+		router.HandleFunc("/api/users", userHandlers.GetAllUsers).Methods("GET")
+		router.HandleFunc("/api/users", userHandlers.AddNewUser).Methods("POST")
 
 		log.Info("Starting server...")
 		err := server.ListenAndServe()

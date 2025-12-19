@@ -15,14 +15,13 @@ import (
 )
 
 type MinIoRepository struct {
-	log       *utils.Logger
-	client    *minio.Client
-	bucket    string
-	filename  string
-	ctx       context.Context
-	ctxCancel context.CancelFunc
-	users     []models.User
-	mu        sync.RWMutex
+	log        *utils.Logger
+	client     *minio.Client
+	bucket     string
+	filename   string
+	users      []models.User
+	ctxTimeout int
+	mu         sync.RWMutex
 }
 
 func NewMinIoRepository(endpoint, username, password, bucket, filename string, ctx context.Context, ctxTimeout int) *MinIoRepository {
@@ -42,24 +41,24 @@ func NewMinIoRepository(endpoint, username, password, bucket, filename string, c
 	log.Info("MinIO connection established!")
 
 	connCtx, cancel := context.WithTimeout(ctx, time.Duration(ctxTimeout)*time.Second)
+	defer cancel()
 
 	result := MinIoRepository{
-		log:       log,
-		client:    client,
-		bucket:    bucket,
-		filename:  filename,
-		ctx:       connCtx,
-		ctxCancel: cancel,
+		log:        log,
+		client:     client,
+		bucket:     bucket,
+		filename:   filename,
+		ctxTimeout: ctxTimeout,
 	}
 
-	exists, _ := client.BucketExists(result.ctx, bucket)
+	exists, _ := client.BucketExists(connCtx, bucket)
 	if !exists {
 		log.Info("No bucket. Create it")
-		client.MakeBucket(result.ctx, bucket, minio.MakeBucketOptions{})
+		client.MakeBucket(connCtx, bucket, minio.MakeBucketOptions{})
 	}
 
-	if !result.loadUsers() {
-		err := result.saveUsers()
+	if !result.loadUsers(ctx) {
+		err := result.saveUsers(ctx)
 		if err != nil {
 			log.Critical("Cann't create users file: %+v", err)
 			return nil
@@ -69,8 +68,10 @@ func NewMinIoRepository(endpoint, username, password, bucket, filename string, c
 	return &result
 }
 
-func (r *MinIoRepository) loadUsers() bool {
-	obj, err := r.client.GetObject(r.ctx, r.bucket, r.filename, minio.GetObjectOptions{})
+func (r *MinIoRepository) loadUsers(ctx context.Context) bool {
+	connCtx, cancel := context.WithTimeout(ctx, time.Duration(r.ctxTimeout)*time.Second)
+	defer cancel()
+	obj, err := r.client.GetObject(connCtx, r.bucket, r.filename, minio.GetObjectOptions{})
 	if err != nil {
 		r.log.Error("Cann't read file: %+v", err)
 		return false
@@ -80,7 +81,7 @@ func (r *MinIoRepository) loadUsers() bool {
 	data, err := io.ReadAll(obj)
 	if err != nil {
 		r.log.Error("Read file error: %+v", err)
-		r.removeAllUsers()
+		r.removeAllUsers(ctx)
 		return false
 	}
 
@@ -91,7 +92,7 @@ func (r *MinIoRepository) loadUsers() bool {
 
 	if err := json.Unmarshal(data, &r.users); err != nil {
 		r.log.Error("File is not json: %+v", err)
-		r.removeAllUsers()
+		r.removeAllUsers(ctx)
 		return false
 	}
 
@@ -100,12 +101,14 @@ func (r *MinIoRepository) loadUsers() bool {
 	return true
 }
 
-func (r *MinIoRepository) saveUsers() error {
+func (r *MinIoRepository) saveUsers(ctx context.Context) error {
 	data, _ := json.MarshalIndent(r.users, "", "  ")
 	reader := bytes.NewReader(data)
 
+	connCtx, cancel := context.WithTimeout(ctx, time.Duration(r.ctxTimeout)*time.Second)
+	defer cancel()
 	_, err := r.client.PutObject(
-		r.ctx,
+		connCtx,
 		r.bucket,
 		r.filename,
 		reader,
@@ -115,8 +118,12 @@ func (r *MinIoRepository) saveUsers() error {
 	return err
 }
 
-func (r *MinIoRepository) removeAllUsers() {
-	err := r.client.RemoveObject(r.ctx, r.bucket, r.filename, minio.RemoveObjectOptions{})
+func (r *MinIoRepository) removeAllUsers(ctx context.Context) {
+
+	connCtx, cancel := context.WithTimeout(ctx, time.Duration(r.ctxTimeout)*time.Second)
+	defer cancel()
+
+	err := r.client.RemoveObject(connCtx, r.bucket, r.filename, minio.RemoveObjectOptions{})
 	if err != nil {
 		r.log.Critical("Cann't delete users: %+v", err)
 		return
@@ -127,7 +134,6 @@ func (r *MinIoRepository) removeAllUsers() {
 
 func (r *MinIoRepository) Close() {
 	r.log.Info("Stop MinIO context!")
-	r.ctxCancel()
 }
 
 func (r *MinIoRepository) GetAllUsers() []models.User {
@@ -158,13 +164,13 @@ func (r *MinIoRepository) checkForUserExists(name, email string) bool {
 	return false
 }
 
-func (r *MinIoRepository) AddNewUser(name, email string) bool {
+func (r *MinIoRepository) AddNewUser(name, email string, ctx context.Context) *models.User {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	check := r.checkForUserExists(name, email)
 	if check {
-		return false
+		return nil
 	}
 	user := models.User{
 		ID:    len(r.users),
@@ -173,10 +179,10 @@ func (r *MinIoRepository) AddNewUser(name, email string) bool {
 	}
 
 	r.users = append(r.users, user)
-	err := r.saveUsers()
+	err := r.saveUsers(ctx)
 	if err != nil {
 		r.log.Critical("Save users error: %+v", err)
-		return false
+		return nil
 	}
-	return true
+	return &user
 }
