@@ -41,11 +41,14 @@ func main() {
 	serverErr := make(chan error, 1)
 
 	go func() {
-		router.NotFoundHandler = http.HandlerFunc(userHandlers.NotFoundEndpoint)
 
 		router.HandleFunc("/test", userHandlers.TestEndpoint).Methods("GET")
 		router.HandleFunc("/api/users", userHandlers.GetAllUsers).Methods("GET")
 		router.HandleFunc("/api/users", userHandlers.AddNewUser).Methods("POST")
+
+		router.HandleFunc("/api/users/{id}", userHandlers.GetUserById).Methods("GET")
+
+		router.NotFoundHandler = http.HandlerFunc(userHandlers.NotFoundEndpoint)
 
 		log.Info("Starting server...")
 		err := server.ListenAndServe()

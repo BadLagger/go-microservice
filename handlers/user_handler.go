@@ -7,8 +7,10 @@ import (
 	"go-microservice/repository"
 	"go-microservice/utils"
 	"net/http"
+	"strconv"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/gorilla/mux"
 )
 
 type UserHandler struct {
@@ -84,6 +86,34 @@ func (h *UserHandler) AddNewUser(w http.ResponseWriter, r *http.Request) {
 		h.log.Error("Failed to encode response: %+v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
+	h.log.Info("User created: %d", user.ID)
+}
+
+func (h *UserHandler) GetUserById(w http.ResponseWriter, r *http.Request) {
+	h.log.Info("Get User By Id: %s", r.RemoteAddr)
+
+	vars := mux.Vars(r)
+	idStr := vars["id"]
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		h.log.Error("Invalid user ID: %s", idStr)
+		http.Error(w, "Invalid user ID format", http.StatusBadRequest)
+		return
+	}
+
+	user := h.repo.GetUserById(id)
+	if user == nil {
+		h.log.Error("User with ID: %d not found", id)
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(user); err != nil {
+		h.log.Error("Failed to encode response: %+v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+	h.log.Info("User found: %d", user.ID)
 }
 
 func (h *UserHandler) validateRequest(w http.ResponseWriter, s interface{}) error {
