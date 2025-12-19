@@ -180,6 +180,27 @@ func (h *UserHandler) ChangeUserById(w http.ResponseWriter, r *http.Request) {
 	h.log.Info("User updated: %d", id)
 }
 
+func (h *UserHandler) DeleteById(w http.ResponseWriter, r *http.Request) {
+	h.log.Info("Delete User By Id: %s", r.RemoteAddr)
+	vars := mux.Vars(r)
+	idStr := vars["id"]
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		h.log.Error("Invalid user ID: %s", idStr)
+		http.Error(w, "Invalid user ID format", http.StatusBadRequest)
+		return
+	}
+
+	err = h.repo.DeleteById(id, r.Context())
+	if err != nil {
+		h.log.Error("Delete user error: %+v", err)
+		http.Error(w, "Invalid user ID format", http.StatusBadRequest)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 func (h *UserHandler) validateRequest(w http.ResponseWriter, s interface{}) error {
 
 	log := utils.GlobalLogger()

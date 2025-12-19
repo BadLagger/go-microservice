@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"go-microservice/models"
 	"go-microservice/utils"
 	"io"
@@ -136,13 +137,18 @@ func (r *MinIoRepository) removeAllUsers(ctx context.Context) {
 }
 
 func (r *MinIoRepository) initMaxId() {
-
 	r.maxCurrentId = 0
+
+	if len(r.users) == 0 {
+		return
+	}
+
 	for id := range r.users {
 		if id > r.maxCurrentId {
 			r.maxCurrentId = id
 		}
 	}
+	r.maxCurrentId++
 }
 
 func (r *MinIoRepository) Close() {
@@ -202,6 +208,17 @@ func (r *MinIoRepository) AddNewUser(name, email string, ctx context.Context) *m
 	}
 	result := models.MapToUser(id, &user)
 	return &result
+}
+
+func (r *MinIoRepository) DeleteById(id int, ctx context.Context) error {
+	_, exists := r.users[id]
+	if !exists {
+		return fmt.Errorf("user not found")
+	}
+
+	delete(r.users, id)
+	err := r.saveUsers(ctx)
+	return err
 }
 
 func (r *MinIoRepository) Update(ctx context.Context) error {

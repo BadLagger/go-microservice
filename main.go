@@ -48,6 +48,7 @@ func main() {
 
 		router.HandleFunc("/api/users/{id}", userHandlers.GetUserById).Methods("GET")
 		router.HandleFunc("/api/users/{id}", userHandlers.ChangeUserById).Methods("PUT")
+		router.HandleFunc("/api/users/{id}", userHandlers.DeleteById).Methods("DELETE")
 
 		router.NotFoundHandler = http.HandlerFunc(userHandlers.NotFoundEndpoint)
 
