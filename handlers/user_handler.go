@@ -62,7 +62,7 @@ func (h *UserHandler) GetAllUsers(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandler) AddNewUser(w http.ResponseWriter, r *http.Request) {
 	h.log.Info("Try Add New User From: %s", r.RemoteAddr)
 
-	var userRequest models.UserDto
+	var userRequest models.UserMap
 
 	err := json.NewDecoder(r.Body).Decode(&userRequest)
 	if err != nil {
@@ -113,7 +113,7 @@ func (h *UserHandler) GetUserById(w http.ResponseWriter, r *http.Request) {
 		h.log.Error("Failed to encode response: %+v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
-	h.log.Info("User found: %d", user.ID)
+	h.log.Info("User found: %d", id)
 }
 
 func (h *UserHandler) ChangeUserById(w http.ResponseWriter, r *http.Request) {
@@ -136,7 +136,7 @@ func (h *UserHandler) ChangeUserById(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var userRequest models.UserDto
+	var userRequest models.UserMap
 
 	err = json.NewDecoder(r.Body).Decode(&userRequest)
 	if err != nil {
@@ -177,7 +177,7 @@ func (h *UserHandler) ChangeUserById(w http.ResponseWriter, r *http.Request) {
 		h.log.Error("Failed to encode response: %+v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
-	h.log.Info("User updated: %d", user.ID)
+	h.log.Info("User updated: %d", id)
 }
 
 func (h *UserHandler) validateRequest(w http.ResponseWriter, s interface{}) error {

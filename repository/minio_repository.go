@@ -15,13 +15,14 @@ import (
 )
 
 type MinIoRepository struct {
-	log        *utils.Logger
-	client     *minio.Client
-	bucket     string
-	filename   string
-	users      []models.User
-	ctxTimeout int
-	mu         sync.RWMutex
+	log          *utils.Logger
+	client       *minio.Client
+	bucket       string
+	filename     string
+	users        map[int]*models.UserMap
+	ctxTimeout   int
+	mu           sync.RWMutex
+	maxCurrentId int
 }
 
 func NewMinIoRepository(endpoint, username, password, bucket, filename string, ctx context.Context, ctxTimeout int) *MinIoRepository {
@@ -64,6 +65,8 @@ func NewMinIoRepository(endpoint, username, password, bucket, filename string, c
 			return nil
 		}
 	}
+
+	result.initMaxId()
 
 	return &result
 }
@@ -128,8 +131,18 @@ func (r *MinIoRepository) removeAllUsers(ctx context.Context) {
 		r.log.Critical("Cann't delete users: %+v", err)
 		return
 	}
-	r.users = make([]models.User, 0)
+	r.users = make(map[int]*models.UserMap)
 	r.log.Info("All Users deleted!")
+}
+
+func (r *MinIoRepository) initMaxId() {
+
+	r.maxCurrentId = 0
+	for id := range r.users {
+		if id > r.maxCurrentId {
+			r.maxCurrentId = id
+		}
+	}
 }
 
 func (r *MinIoRepository) Close() {
@@ -140,19 +153,24 @@ func (r *MinIoRepository) GetAllUsers() []models.User {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return r.users
+	users := make([]models.User, 0)
+	for id, user := range r.users {
+		users = append(users, models.MapToUser(id, user))
+	}
+
+	return users
 }
 
-func (r *MinIoRepository) GetUserById(id int) *models.User {
+func (r *MinIoRepository) GetUserById(id int) *models.UserMap {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	for i := range r.users {
-		if r.users[i].ID == id {
-			return &r.users[i]
-		}
+	user, exists := r.users[id]
+	if !exists {
+		return nil
 	}
-	return nil
+
+	return user
 }
 
 func (r *MinIoRepository) checkForUserExists(name, email string) bool {
@@ -172,19 +190,18 @@ func (r *MinIoRepository) AddNewUser(name, email string, ctx context.Context) *m
 	if check {
 		return nil
 	}
-	user := models.User{
-		ID:    len(r.users),
-		Name:  name,
-		Email: email,
-	}
 
-	r.users = append(r.users, user)
+	id := r.maxCurrentId
+	user := models.UserMap{Name: name, Email: email}
+	r.users[id] = &user
+	r.maxCurrentId++
 	err := r.saveUsers(ctx)
 	if err != nil {
 		r.log.Critical("Save users error: %+v", err)
 		return nil
 	}
-	return &user
+	result := models.MapToUser(id, &user)
+	return &result
 }
 
 func (r *MinIoRepository) Update(ctx context.Context) error {

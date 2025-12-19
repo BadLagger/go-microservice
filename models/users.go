@@ -1,12 +1,18 @@
 package models
 
 type User struct {
-	ID    int    `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
+	ID int `json:"id"`
+	UserMap
 }
 
-type UserDto struct {
+type UserMap struct {
 	Name  string `json:"name" validate:"required,min=2,max=100"`
 	Email string `json:"email" validate:"required,email"`
+}
+
+func MapToUser(id int, user *UserMap) User {
+	return User{
+		ID:      id,
+		UserMap: *user,
+	}
 }
