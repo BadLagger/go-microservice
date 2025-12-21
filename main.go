@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"go-microservice/handlers"
+	"go-microservice/metrics"
 	"go-microservice/repository"
 	"go-microservice/utils"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gorilla/mux"
 )
@@ -31,9 +33,51 @@ func main() {
 	}
 	defer repo.Close()
 
+	prometheusMetrics := metrics.NewPrometheusMetrics()
+	rateLimiter := utils.NewRateLimiter(1000, 5000)
+
 	userHandlers := handlers.NewUserHandler(repo)
 
 	router := mux.NewRouter()
+
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Пропускаем /metrics
+			if r.URL.Path == "/metrics" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			start := time.Now()
+
+			// Счётчик активных запросов для метрик
+			prometheusMetrics.ReqsInProgress.WithLabelValues(r.Method, r.URL.Path).Inc()
+			defer prometheusMetrics.ReqsInProgress.WithLabelValues(r.Method, r.URL.Path).Dec()
+
+			if !rateLimiter.Limiter.Allow() {
+				// Обработка лимитов по соединению с учётом метрик
+				duration := time.Since(start).Seconds()
+				prometheusMetrics.ReqDuration.WithLabelValues(r.Method, r.URL.Path).Observe(duration)
+				prometheusMetrics.TotalReqs.WithLabelValues(r.Method, r.URL.Path, "Too Many Requests").Inc()
+				w.Header().Set("Retry-After", "1")
+				http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
+				return
+			}
+
+			rw := &metrics.ResponseWriter{ResponseWriter: w, StatusCode: 200}
+			next.ServeHTTP(rw, r)
+
+			duration := time.Since(start).Seconds()
+			prometheusMetrics.ReqDuration.WithLabelValues(r.Method, r.URL.Path).Observe(duration)
+
+			statusText := http.StatusText(rw.StatusCode)
+			prometheusMetrics.TotalReqs.WithLabelValues(r.Method, r.URL.Path, statusText).Inc()
+
+		})
+	})
+	//router.Use(rateLimiter.LimitMiddleware)
+	//router.Use(prometheusMetrics.MetricsMiddleware)
+
 	server := &http.Server{
 		Addr:    cfg.HostAddress,
 		Handler: router,
@@ -41,6 +85,9 @@ func main() {
 	serverErr := make(chan error, 1)
 
 	go func() {
+
+		// 1. Эндпоинт для метрик Prometheus (ВАЖНО!!! На проде не должен торчать наружу )
+		router.Handle("/metrics", prometheusMetrics.GetHandler()).Methods("GET")
 
 		router.HandleFunc("/test", userHandlers.TestEndpoint).Methods("GET")
 		router.HandleFunc("/api/users", userHandlers.GetAllUsers).Methods("GET")
@@ -72,4 +119,10 @@ func main() {
 		log.Error("Context DONE! Unexpected!")
 	}
 
+}
+
+func Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+	})
 }

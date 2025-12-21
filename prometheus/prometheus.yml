@@ -1,0 +1,38 @@
+global:
+  scrape_interval: 5s  # Как часто собирать метрики
+  evaluation_interval: 5s  # Как часто оценивать правила
+  scrape_timeout: 4s  # Таймаут сбора метрики
+
+# Правила алертов (опционально)
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+# Конфигурация scrape (что мониторить)
+scrape_configs:
+  # Мониторим само Prometheus
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 10s
+
+  # Мониторим ваше Go приложение
+  - job_name: 'go-microservice'
+    static_configs:
+      - targets: ['app:9898']  # Имя сервиса из docker-compose
+    scrape_interval: 2s  # Чаще для нагрузочного тестирования
+    metrics_path: '/metrics'
+    sample_limit: 10000    # Увеличим лимит сэмплов
+    # Можно добавить дополнительные метки
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'go-microservice-app'
+      - source_labels: [__meta_docker_container_name]
+        target_label: container
+
+  # Мониторим сам Docker (опционально)
+  #- job_name: 'docker'
+  #  static_configs:
+  #    - targets: ['host.docker.internal:9323']  # Docker metrics endpoint
+  #  scrape_interval: 30s
