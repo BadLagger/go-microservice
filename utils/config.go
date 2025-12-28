@@ -9,11 +9,8 @@ import (
 type Config struct {
 	AppName       string
 	HostAddress   string
-	MinioEndpoint string
-	MinioUser     string
-	MinioPassword string
-	MinioBucket   string
-	MinioFile     string
+	RedisEndpoint string
+	RedisPassword string
 }
 
 func CfgLoad(app string) *Config {
@@ -22,11 +19,8 @@ func CfgLoad(app string) *Config {
 	return &Config{
 		AppName:       app,
 		HostAddress:   getEnv("HOST_ADDRESS", ":9898"),
-		MinioEndpoint: getEnv("MINIO_ENDPOINT", "minio:9000"),
-		MinioUser:     getEnv("MINIO_USER", "root_minio"),
-		MinioPassword: getEnv("MINIO_PASSWORD", "root_paswd"),
-		MinioBucket:   getEnv("MINIO_BUCKET", "user-bucket"),
-		MinioFile:     getEnv("MINIO_FILE", "file.json"),
+		RedisEndpoint: getEnv("REDIS_ENDPOINT", "redis:6379"),
+		RedisPassword: getEnv("REDIS_PASSWORD", ""),
 	}
 }
 

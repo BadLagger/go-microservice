@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"go-microservice/analytics"
 	"go-microservice/handlers"
 	"go-microservice/metrics"
 	"go-microservice/repository"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -26,17 +28,39 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	repo := repository.NewMinIoRepository(cfg.MinioEndpoint, cfg.MinioUser, cfg.MinioPassword, cfg.MinioBucket, cfg.MinioFile, ctx, 5)
-	if repo == nil {
-		log.Critical("MinIO down!")
-		return
-	}
-	defer repo.Close()
+	metricsCtx, metricsCancel := context.WithCancel(context.Background())
+	defer metricsCancel()
 
+	redisDb := redis.NewClient(&redis.Options{
+		Addr:     cfg.RedisEndpoint,
+		Password: cfg.RedisPassword,
+		DB:       0,
+	})
+
+	repo := repository.NewRedisRepository(redisDb)
+
+	analyzer := analytics.NewAnalyzer(50)
 	prometheusMetrics := metrics.NewPrometheusMetrics()
-	rateLimiter := utils.NewRateLimiter(1000, 5000)
 
-	userHandlers := handlers.NewUserHandler(repo)
+	// Запускаем фоновое обновление метрик Prometheus
+	go func(ctx context.Context) {
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				log.Info("Metrics updater stopped")
+				return
+			case <-ticker.C:
+				prometheusMetrics.UpdateFromAnalyzer(analyzer)
+			}
+		}
+	}(metricsCtx)
+
+	rateLimiter := utils.NewRateLimiter(1000, 500)
+
+	metricsHandler := handlers.NewMetricsHandler(repo, analyzer, prometheusMetrics)
 
 	router := mux.NewRouter()
 
@@ -75,8 +99,6 @@ func main() {
 
 		})
 	})
-	//router.Use(rateLimiter.LimitMiddleware)
-	//router.Use(prometheusMetrics.MetricsMiddleware)
 
 	server := &http.Server{
 		Addr:    cfg.HostAddress,
@@ -89,15 +111,9 @@ func main() {
 		// 1. Эндпоинт для метрик Prometheus (ВАЖНО!!! На проде не должен торчать наружу )
 		router.Handle("/metrics", prometheusMetrics.GetHandler()).Methods("GET")
 
-		router.HandleFunc("/test", userHandlers.TestEndpoint).Methods("GET")
-		router.HandleFunc("/api/users", userHandlers.GetAllUsers).Methods("GET")
-		router.HandleFunc("/api/users", userHandlers.AddNewUser).Methods("POST")
-
-		router.HandleFunc("/api/users/{id}", userHandlers.GetUserById).Methods("GET")
-		router.HandleFunc("/api/users/{id}", userHandlers.ChangeUserById).Methods("PUT")
-		router.HandleFunc("/api/users/{id}", userHandlers.DeleteById).Methods("DELETE")
-
-		router.NotFoundHandler = http.HandlerFunc(userHandlers.NotFoundEndpoint)
+		router.HandleFunc("/metric", metricsHandler.AddMetric).Methods("POST")
+		router.HandleFunc("/metrics/latest", metricsHandler.GetLatestMetrics).Methods("GET")
+		router.HandleFunc("/health", metricsHandler.HealthCheck).Methods("GET")
 
 		log.Info("Starting server...")
 		err := server.ListenAndServe()
@@ -111,18 +127,15 @@ func main() {
 
 	select {
 	case <-quit:
+		metricsCancel()
 		server.Shutdown(ctx)
 		log.Info("Signal to escape! Shutdown")
 	case err := <-serverErr:
+		metricsCancel()
 		log.Critical("Server down: %+v", err)
 	case <-ctx.Done():
+		metricsCancel()
 		log.Error("Context DONE! Unexpected!")
 	}
 
-}
-
-func Middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-	})
 }

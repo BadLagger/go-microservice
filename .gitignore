@@ -8,4 +8,5 @@
 !README.md
 !*.go
 !*.sql
+!*.py
 !*/

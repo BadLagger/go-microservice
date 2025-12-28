@@ -1,9 +1,11 @@
 package utils
 
 import (
+	"fmt"
 	"log"
 	"strings"
 	"sync"
+	"time"
 )
 
 type LogLevel byte
@@ -57,15 +59,71 @@ func (l LogLevel) String() string {
 	return strings.Join(strParts, " | ")
 }
 
+type LogEntry struct {
+	Time    time.Time
+	Level   LogLevel
+	Message string
+	Args    []any
+}
+
 type Logger struct {
-	level LogLevel
-	mtx   sync.RWMutex
+	level    LogLevel
+	mtx      sync.RWMutex
+	async    bool
+	logChan  chan LogEntry  // Канал для асинхронной обработки
+	stopChan chan struct{}  // Канал для остановки
+	wg       sync.WaitGroup // Для graceful shutdown
 }
 
 func NewLogger() *Logger {
 	return &Logger{
 		level: Info,
+		async: false,
 	}
+}
+
+func NewAsyncLogger(level LogLevel, bufferSize int) *Logger {
+
+	logger := &Logger{
+		level:    level,
+		logChan:  make(chan LogEntry, bufferSize), // Буферизированный канал
+		stopChan: make(chan struct{}),
+		async:    true,
+	}
+
+	logger.wg.Add(1)
+	go logger.processLogs()
+
+	return logger
+}
+
+// Worker для обработки логов
+func (l *Logger) processLogs() {
+	defer l.wg.Done()
+
+	for {
+		select {
+		case <-l.stopChan:
+			// Обрабатываем оставшиеся логи перед выходом
+			for {
+				select {
+				case entry := <-l.logChan:
+					l.writeLog(entry)
+				default:
+					return
+				}
+			}
+		case entry := <-l.logChan:
+			l.writeLog(entry)
+		}
+	}
+}
+
+// Синхронная запись лога (только здесь!)
+func (l *Logger) writeLog(entry LogEntry) {
+	timestamp := entry.Time.Format("2006-01-02 15:04:05.000")
+	formattedMsg := fmt.Sprintf(entry.Message, entry.Args...)
+	log.Printf("[%s] [%s]: %s", timestamp, entry.Level.String(), formattedMsg)
 }
 
 func (l *Logger) SetLevel(level LogLevel) *Logger {
@@ -86,8 +144,27 @@ func (l *Logger) Log(level LogLevel, message string, args ...any) {
 	shouldLog := (l.GetLevel() != Off && l.GetLevel() <= level) || (l.GetLevel() == All)
 	l.mtx.RUnlock()
 
-	if shouldLog {
-		log.Printf("["+level.String()+"]: "+message, args...)
+	if !l.async {
+		if shouldLog {
+			log.Printf("["+level.String()+"]: "+message, args...)
+		}
+	} else {
+		if !shouldLog {
+			return
+		}
+
+		select {
+		case l.logChan <- LogEntry{
+			Time:    time.Now(),
+			Level:   level,
+			Message: message,
+			Args:    args,
+		}:
+			// Успешно отправлено
+		default:
+			// Если канал переполнен, пишем напрямую (редкий случай)
+			log.Printf("[WARNING]: Log buffer overflow: %s", fmt.Sprintf(message, args...))
+		}
 	}
 }
 
@@ -118,7 +195,8 @@ var (
 
 func GlobalLogger() *Logger {
 	once.Do(func() {
-		instance = NewLogger()
+		//instance = NewLogger()
+		instance = NewAsyncLogger(Info, 10000)
 	})
 	return instance
 }
