@@ -11,7 +11,7 @@ import sys
 
 def send_simple_metric(device_id, value):
     """Отправляет метрику используя только urllib (нет зависимостей)."""
-    url = "http://172.27.185.72:30080/metric"
+    url = "http://metrics.local/metric"
     data = json.dumps({"device_id": f"sensor_{device_id}", "value": value})
     
     try:
