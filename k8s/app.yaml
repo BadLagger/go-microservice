@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  REDIS_ENDPOINT: "redis:6379"
+  HOST_ADDRESS: ":9898"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: metrics-app
+spec:
+  selector:
+    app: metrics-app
+  ports:
+  - port: 9898
+    targetPort: 9898
+    nodePort: 30080  # для доступа снаружи
+  type: NodePort
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metrics-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: metrics-app
+  template:
+    metadata:
+      labels:
+        app: metrics-app
+    spec:
+      containers:
+      - name: metrics-app
+        image: metrics-app:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 9898
+        env:
+        - name: REDIS_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: REDIS_ENDPOINT
+        - name: HOST_ADDRESS
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: HOST_ADDRESS
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
