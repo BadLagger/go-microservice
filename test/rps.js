@@ -3,27 +3,32 @@ import { check } from 'k6';
 
 export const options = {
   vus: 300,
-  duration: '30s',
-  // или точный RPS:
-  // stages: [
-  //   { duration: '30s', target: 1000 }, // 1000 RPS
-  // ],
+  duration: '180s',
 };
 
 export default function () {
   const payload = JSON.stringify({
     device_id: `test-${__VU}-${__ITER}`,
-    value: Math.random() < 0.1 ? 
-      Math.random() * 50 + 100 :  // 10% аномалий
-      Math.random() * 10 + 20     // 90% нормальных
+    value: Math.random() * 10 + 20
   });
   
   const params = {
     headers: { 'Content-Type': 'application/json' },
   };
   
-  const res = http.post('http://metrics.local:30080/metric', payload, params);
+  const res = http.post('http://metrics.local/metric', payload, params);
   
+  // Раздельные checks для разных статусов
+  // Они появятся в итоговой статистике
+  check(res, {
+    'status is 202 (accepted)': (r) => r.status === 202,
+  });
+  
+  check(res, {
+    'status is 429 (rate limited)': (r) => r.status === 429,
+  });
+  
+  // Общий check для отображения в результатах
   check(res, {
     'status is 202 or 429': (r) => r.status === 202 || r.status === 429,
   });
