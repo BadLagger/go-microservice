@@ -2,78 +2,110 @@
 
 ## Описание ##
 
-Проект является бэкэндом в рамках которого демонстрируются навыки работы с микросервисной архитектурой. Является референсом для реализации более сложных проектов. Содержит пример разворачивания микросервисной архитектуры с использованием хранилища и систем мониторинга производительности.
+Отказоустойчивый, высокопроизводительный микросервис для приема и обработки метрик от IoT-устройств, способный обрабатывать не менее 1000 запросов в секунду (RPS) с гарантированным временем отклика и автоматическим масштабированием под нагрузкой.
 
 ## Технологический стэк ##
 
 - __Go 1.24+__ - основной язык разработки
 - __Gorilla Mux__ - роутинг HTTP запросов
-- __MinIO__ - S3-совместимое объектное хранилище
+- __Redis__ - хранилище
 - __Prometheus__ - сбор и хранение метрик
 - __Grafana__ - визуализация и дашборды
-- __Docker Compose__ - оркестрация контейнеров
+- __minikube__ - оркестрация контейнеров
 
 ## Архитектура ##
 
 ```text
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Клиенты       │────│   Go API Server │────│     MinIO       │
-│   (HTTP/REST)   │    │   (:9898)       │    │  (Хранилище)    │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │   Prometheus        │◄───┐
-                    │   (Метрики)         │    │
-                    └─────────────────────┘    │
-                               │               │
-                               ▼               │
-                    ┌─────────────────────┐    │
-                    │   Grafana           │────┘
-                    │   (Визуализация)    │
-                    └─────────────────────┘
+┌─────────────────┐     HTTP/HTTPS     ┌──────────────────┐
+│   IoT Devices   │───────────────────▶│   Nginx Ingress  │
+│  (1000+ units)  │                    │    Controller    │
+└─────────────────┘                    └─────────┬────────┘
+                                                 │
+                                                 ▼
+                                        ┌──────────────────┐
+                                        │   Go Service     │
+                                        │  (metrics-app)   │
+                                        └─────────┬────────┘
+                                              │   │   │
+                ┌────────────────┬────────────┘   │   └──────────────┐
+                ▼                ▼                ▼                  ▼
+        ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌────────────────┐
+        │   Rate       │ │   Metrics    │ │   Anomaly    │ │   Health       │
+        │   Limiter    │ │   Storage    │ │   Detection  │ │   Checks       │
+        │  (1000 RPS)  │ │  (Redis)     │ │  (Analytics) │ │  (Readiness)   │
+        └──────────────┘ └──────────────┘ └──────────────┘ └────────────────┘
 ```
-Для простоты в проекте отсутстует работа с БД. Вместо этого все данные хранятся в одном JSON файле в MinIO.
 
 ## Доступные сервисы ##
 |Сервис| Порт | Описание |
 |------|------|----------|
-| Go Application | 9898 | Основной API сервер |
-| Prometheus | 9090 | Система мониторинга и сбора метрик |
-| Grafana | 	3000 | Визуализация метрик и дашборды |
-| MinIO Console | 5002 | Управление объектным хранилищем |
-| MinIO API | 5001 | S3-совместимое API |
+| Go Application | 30080 | Основной API сервер |
+| Prometheus | 30090 | Система мониторинга и сбора метрик |
+| Grafana | 	30300 | Визуализация метрик и дашборды |
 
 ## API Endpoints ##
 
-### Пользователи ###
-- GET /api/users - Получить всех пользователей
-- POST /api/users - Добавить нового пользователя
-- GET /api/users/{id} - Получить пользователя по ID
-- PUT /api/users/{id} - Обновить пользователя
-- DELETE /api/users/{id} - Удалить пользователя
+### Метрики IoT ###
+- POST /metric - Добавить метрику
+- GET //metrics/latest - Получить последнюю метрику
 
 ### Тестирование и мониторинг ###
 
-- GET /test - Тестовый endpoint
 - GET /metrics - Prometheus метрики
 - GET /health - Health check
 
-##  Docker развертывание ##
+##  Развертывание Minikube ##
+```bash
+# удаляем старый кластер если есть
+minikube delete
 
-### Запуск всех сервисов ###
-```bash
-docker-compose up -d
-```
-### Остановка ###
-```bash
-docker-compose down
-```
-### Просмотр логов ###
-```bash
-docker-compose logs -f app
-docker-compose logs -f prometheus
-docker-compose logs -f grafana
+# создаём новый кластер
+#minikube start --cpus=4 --memory=8192 --disk-size=20gb
+minikube start --driver=hyperv --cpus=4 --memory=8192 --disk-size=20gb
+
+# Это для Linux
+# eval $(minikube docker-env)
+# Это для Windows
+minikube docker-env | Invoke-Expression
+
+# Включаем метрики
+minikube addons enable metrics-server
+
+# Включаем Ingress
+minikube addons enable ingress
+
+# Собираем образ приложения
+docker build -f k8s/Dockerfile -t metrics-app:latest .
+
+kubectl apply -f k8s/redis.yaml
+kubectl apply -f k8s/app.yaml
+kubectl apply -f k8s/hpa.yaml
+kubectl apply -f k8s/prometheus-config.yaml
+kubectl apply -f k8s/prometheus.yaml
+kubectl apply -f .\k8s\grafana-configs.yaml
+kubectl apply -f .\k8s\grafana.yaml
+kubectl apply -f .\k8s\ingress.yaml
+
+
+minikube ip
+# Далее всё для Windows 11 (Power Shell)
+# Проверяем хосты
+Get-Content C:\Windows\System32\drivers\etc\hosts
+
+# Если в хостах уже есть metrics.local чистим
+$hostsPath = "C:\Windows\System32\drivers\etc\hosts"
+$cleanLines = Get-Content $hostsPath | Where-Object {
+     $_ -notmatch "metrics\.local" -and
+     $_ -notmatch "^\s*$"  # удалить пустые строки
+ }
+
+ Set-Content -Path $hostsPath -Value $cleanLines -Force
+
+# Сохраняем в переменную
+$ip = minikube ip
+
+# Прописываем в хосты
+Add-Content -Path "C:\Windows\System32\drivers\etc\hosts" -Value "`n${ip} metrics.local" -Force
 ```
 
 ## Мониторинг и метрики ##
@@ -83,17 +115,13 @@ docker-compose logs -f grafana
 Включены готовые дашборды:
 1. RPS график - запросы в секунду
 2. Latency график - время ответа
-3. Error Rate - процент ошибок
-4. Active Requests - запросы в обработке
+3. IoT метрики
 
 ## Нагрузочное тестирование ##
-
 ```bash
-# Базовая нагрузка
-./wrk -t12 -c500 -d60s http://localhost:9898/api/users
-
-# Проверка rate limiting
-./wrk -t4 -c100 -d30s http://localhost:9898/api/users
+choco install k6
+# Для тестирования:
+k6.exe run .\rps.js
 ```
 
 ### Интерпретация результатов ###
@@ -101,21 +129,4 @@ docker-compose logs -f grafana
 - 429 ошибки: при превышении лимита
 - Latency: стабильная при нагрузке
 
-## Структура проекта ##
-```text
-go-microservice/
-├── main.go                 # Точка входа
-├── docker-compose.yml      # Docker конфигурация
-├── Dockerfile             # Образ приложения
-├── prometheus/            # Конфигурация Prometheus
-│   └── prometheus.yml
-├── grafana/               # Конфигурация Grafana
-│   ├── provisioning/
-│   └── dashboards/
-├── handlers/              # HTTP хендлеры
-├── repository/            # Работа с MinIO
-├── metrics/               # Prometheus метрики
-├── utils/                 # Утилиты и утилитарные функции
-└── models/                # Модели данных
-```
 
